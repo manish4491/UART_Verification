@@ -1,0 +1,613 @@
+class uart_sb extends uvm_scoreboard;
+	`uvm_component_utils(uart_sb)
+	
+	uvm_tlm_analysis_fifo #(uart_xtn)a_fifo[];			//PARAMETERIZE WITH TRANSACTION CLASS
+	env_cfg ec_h;
+	uart_xtn txtn;
+	uart_xtn rxtn;
+
+	bit [7:0]thr0[$];
+	bit [7:0]thr1[$];
+	bit [7:0]rbr0[$];
+	bit [7:0]rbr1[$];
+
+	bit [7:0] lcr0;
+        bit [7:0] lcr1;
+	
+	bit [7:0] lsr0;
+	bit [7:0] lsr1;
+
+	bit [7:0] iir0;
+	bit [7:0] iir1;
+
+	bit [7:0] ier0;
+	bit [7:0] ier1;
+
+	bit [7:0] mcr0;
+	bit [7:0] mcr1;
+
+	bit [7:0] fcr0;
+	bit [7:0] fcr1;
+
+	uart_xtn t_cov;
+	uart_xtn r_cov;
+
+
+	covergroup uart1_cov;
+        option.per_instance=1;
+
+		// SIGNAL COVERPOINTS---------------------------------------------------------------------------------------------------
+	
+	       DATA: coverpoint t_cov.dat_i[7:0] 
+		     {
+	                      	bins dat_i = {[0:255]}; 
+		     }
+	
+	       ADDRESS: coverpoint t_cov.adr_i[2:0] 
+		     { 
+	                      	bins addr_i = {[0:7]}; 
+		     }
+
+	       WR_ENB: coverpoint t_cov.we_i 
+		     { 
+	                      	bins rd = {0};
+			      	bins wr = {1}; 
+		     } 
+	       
+		//LCR COVERPOINTS---------------------------------------------------------------------------------------------------------		
+
+  	       CHAR_SIZE: coverpoint t_cov.lcr[1:0] {
+                         	bins five = {2'b00};
+                         	bins six = {2'b01}; 
+                         	bins seven = {2'b10};
+                         	bins eight = {2'b11}; }
+
+       		STOP_BIT: coverpoint t_cov.lcr[2] {
+                         	bins one = {1'b0};
+                         	bins more = {1'b1}; }
+
+       		PARITY: coverpoint t_cov.lcr[3] { 
+                         	bins no_parity = {1'b0};
+                         	bins parity_en = {1'b1}; }
+		
+       		EV_ODD_PARITY: coverpoint t_cov.lcr[4] { 
+                         	bins odd_parity = {1'b0};
+			 	bins even_parity = {1'b1};}
+		
+		STICK_PARITY: coverpoint t_cov.lcr[5] { 
+                         	bins no_stick_parity = {1'b0};
+                         	bins stick_parity = {1'b1}; }
+
+       		BREAK: coverpoint t_cov.lcr[6] {
+                         	bins low = {1'b0};
+                         	bins high = {1'b1}; }
+
+       		DIV_LCH: coverpoint t_cov.lcr[7] {
+                         	bins low = {1'b0};
+                         	bins high = {1'b1}; }
+
+       		LCR_RST: coverpoint t_cov.lcr[7:0] {
+                         	bins lcr_rst = {8'd3}; }
+
+       		CHAR_SIZE_X_STOP_BIT_X_EV_ODD_PARITY: cross CHAR_SIZE,STOP_BIT,EV_ODD_PARITY;
+
+		//IER COVERPOINTS---------------------------------------------------------------------------------------------
+
+		RCVD_INT: coverpoint t_cov.ier[0] { 
+                         	bins dis = {1'b0};
+                         	bins en = {1'b1}; }
+
+		THRE_INT: coverpoint t_cov.ier[1] {
+                         	bins dis = {1'b0};
+                         	bins en = {1'b1}; }
+ 
+     		LSR_INT: coverpoint t_cov.ier[2] {
+                         	bins dis = {1'b0};
+                         	bins en = {1'b1}; }
+
+       		IER_RST: coverpoint t_cov.ier[7:0] { 
+                         	bins ier_rst = {8'd0};}
+	
+
+		// FCR COVERPOINTS----------------------------------------------------------------------------------------------
+ 		RFIFO: coverpoint t_cov.fcr[1] { 
+                	       	 bins dis = {1'b0};
+                       		 bins clr = {1'b1}; }
+
+       		TFIFO: coverpoint t_cov.fcr[2] {
+                        	 bins dis = {1'b0};
+                         	 bins clr = {1'b1}; }
+
+
+       		TRG_LVL: coverpoint t_cov.fcr[7:6] {
+                         	bins one = {2'b00};
+                         	bins four = {2'b01};
+                         	bins eight = {2'b10};
+                         	bins fourteen = {2'b11}; }
+		
+	      //FCR_RST: coverpoint t_cov.fcr[7:0] { bins fcr_rst = {8'd192};}
+
+		// MCR COVERPOINTS------------------------------------------------------------------------------------------------
+
+       		LB: coverpoint t_cov.mcr[4] { 
+                        	bins dis = {1'b0};
+                        	bins en = {1'b1}; }
+	
+       		MCR_RST: coverpoint t_cov.mcr[7:0] { 
+                        	bins lcr_rst = {8'd0};}
+
+		//IIR COVERPOINTS-------------------------------------------------------------------------------------------------
+
+     		IIR: coverpoint t_cov.iir[3:1] {
+                        	bins lsr = {3'b011};
+                        	bins rdf = {3'b010};
+                        	bins ti_o = {3'b110};
+                        	bins threm = {3'b001}; }
+		
+	//	IIR_RST: coverpoint t_cov.iir[3:0] { bins iir_rst = {4'h1};}
+		
+		//LSR COVERPOINTS------------------------------------------------------------------------------------------------
+	
+     		DATA_READY: coverpoint t_cov.lsr[0] {
+                        	bins fifoempty = {1'b0};
+                        	bins datarcvd = {1'b1}; }
+
+     		OVER_RUN: coverpoint t_cov.lsr[1] {
+                        	bins nooverrun = {1'b0};
+                        	bins overrun = {1'b1}; }
+
+     		PARITY_ERR: coverpoint t_cov.lsr[2] { 
+                        	bins noparityerr = {1'b0};
+                        	bins parityerr = {1'b1} ;}
+
+     		FRAME_ERR: coverpoint t_cov.lsr[3] {
+                        	bins noframeerr = {1'b0};
+                        	bins frameerr = {1'b1}; }
+
+     		BREAK_INT: coverpoint t_cov.lsr[4] {
+                        	bins nobreakint = {1'b0};
+                        	bins breakint = {1'b1}; }
+    
+     		THR_EMP: coverpoint t_cov.lsr[5] {
+                        	bins thrnotemp = {1'b0};
+                        	bins thremo = {1'b1}; }
+
+	endgroup
+
+ covergroup uart2_cov;
+        option.per_instance=1;
+
+                // SIGNAL COVERPOINTS---------------------------------------------------------------------------------------------------
+
+               DATA: coverpoint r_cov.dat_i[7:0]
+                     {
+                                bins dat_i = {[0:255]};
+                     }
+
+               ADDRESS: coverpoint r_cov.adr_i[2:0]
+                     {
+                                bins addr_i = {[0:7]};
+                     }
+
+               WR_ENB: coverpoint r_cov.we_i
+                     {
+                                bins rd = {0};
+                                bins wr = {1};
+                     }
+
+                //LCR COVERPOINTS---------------------------------------------------------------------------------------------------------
+
+               CHAR_SIZE: coverpoint r_cov.lcr[1:0] {
+                                bins five = {2'b00};
+                                bins six = {2'b01};
+                                bins seven = {2'b10};
+                                bins eight = {2'b11}; }
+
+                STOP_BIT: coverpoint r_cov.lcr[2] {
+                                bins one = {1'b0};
+                                bins more = {1'b1}; }
+
+                PARITY: coverpoint r_cov.lcr[3] {
+                                bins no_parity = {1'b0};
+                                bins parity_en = {1'b1}; }
+
+                EV_ODD_PARITY: coverpoint r_cov.lcr[4] {
+                                bins odd_parity = {1'b0};
+                                bins even_parity = {1'b1};}
+
+                STICK_PARITY: coverpoint r_cov.lcr[5] {
+                                bins no_stick_parity = {1'b0};
+                                bins stick_parity = {1'b1}; }
+
+                BREAK: coverpoint r_cov.lcr[6] {
+                                bins low = {1'b0};
+                                bins high = {1'b1}; }
+
+                DIV_LCH: coverpoint r_cov.lcr[7] {
+                                bins low = {1'b0};
+                                bins high = {1'b1}; }
+
+                LCR_RST: coverpoint r_cov.lcr[7:0] {
+                                bins lcr_rst = {8'd3}; }
+
+                CHAR_SIZE_X_STOP_BIT_X_EV_ODD_PARITY: cross CHAR_SIZE,STOP_BIT,EV_ODD_PARITY;
+
+                //IER COVERPOINTS---------------------------------------------------------------------------------------------
+
+                RCVD_INT: coverpoint r_cov.ier[0] {
+                                bins dis = {1'b0};
+                                bins en = {1'b1}; }
+
+                THRE_INT: coverpoint r_cov.ier[1] {
+                                bins dis = {1'b0};
+                                bins en = {1'b1}; }
+
+                LSR_INT: coverpoint r_cov.ier[2] {
+                                bins dis = {1'b0};
+                                bins en = {1'b1}; }
+
+                IER_RST: coverpoint r_cov.ier[7:0] {
+                                bins ier_rst = {8'd0};}
+
+
+                // FCR COVERPOINTS----------------------------------------------------------------------------------------------
+                RFIFO: coverpoint r_cov.fcr[1] {
+                                 bins dis = {1'b0};
+                                 bins clr = {1'b1}; }
+
+                TFIFO: coverpoint r_cov.fcr[2] {
+                                 bins dis = {1'b0};
+                                 bins clr = {1'b1}; }
+
+
+                TRG_LVL: coverpoint r_cov.fcr[7:6] {
+                                bins one = {2'b00};
+                                bins four = {2'b01};
+                                bins eight = {2'b10};
+                                bins fourteen = {2'b11}; }
+
+              //FCR_RST: coverpoint r_cov.fcr[7:0] { bins fcr_rst = {8'd192};}
+
+                // MCR COVERPOINTS------------------------------------------------------------------------------------------------
+
+                LB: coverpoint r_cov.mcr[4] {
+                                bins dis = {1'b0};
+                                bins en = {1'b1}; }
+
+                MCR_RST: coverpoint r_cov.mcr[7:0] {
+                                bins lcr_rst = {8'd0};}
+
+                //IIR COVERPOINTS-------------------------------------------------------------------------------------------------
+
+                IIR: coverpoint r_cov.iir[3:1] {
+                                bins lsr = {3'b011};
+                                bins rdf = {3'b010};
+                                bins ti_o = {3'b110};
+                                bins threm = {3'b001}; }
+
+        //      IIR_RST: coverpoint r_cov.iir[3:0] { bins iir_rst = {4'h1};}
+
+                //LSR COVERPOINTS------------------------------------------------------------------------------------------------
+
+                DATA_READY: coverpoint r_cov.lsr[0] {
+                                bins fifoempty = {1'b0};
+                                bins datarcvd = {1'b1}; }
+
+                OVER_RUN: coverpoint r_cov.lsr[1] {
+                                bins nooverrun = {1'b0};
+                                bins overrun = {1'b1}; }
+
+                PARITY_ERR: coverpoint r_cov.lsr[2] {
+                                bins noparityerr = {1'b0};
+                                bins parityerr = {1'b1} ;}
+
+                FRAME_ERR: coverpoint r_cov.lsr[3] {
+                                bins noframeerr = {1'b0};
+                                bins frameerr = {1'b1}; }
+
+                BREAK_INT: coverpoint r_cov.lsr[4] {
+                                bins nobreakint = {1'b0};
+                                bins breakint = {1'b1}; }
+
+                THR_EMP: coverpoint r_cov.lsr[5] {
+                                bins thrnotemp = {1'b0};
+                                bins thremo = {1'b1}; }
+
+        endgroup
+
+
+	function new(string name = "uart_sb",uvm_component parent);
+		super.new(name,parent);
+		uart1_cov = new();
+		uart2_cov = new();
+	endfunction 
+	
+
+	function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+		if(!uvm_config_db#(env_cfg)::get(this,"","env_cfg",ec_h))
+			`uvm_fatal("SCOREBOARD","CONFIG NOT RCVD")
+		
+		a_fifo =  new[ec_h.n_agts];
+		foreach(a_fifo[i])
+			a_fifo[i] = new ($sformatf("a_fifo[%0d]",i),this);		
+	endfunction
+
+	task run_phase(uvm_phase phase);
+		super.run_phase(phase);
+		forever
+		begin
+			
+			fork
+				a_fifo[0].get(txtn);
+				a_fifo[1].get(rxtn);
+			join
+	
+//			lsr_decode(txtn,rxtn);
+					
+			checkkk(txtn,rxtn);
+				
+			t_cov = txtn;
+			r_cov = rxtn;
+		
+			uart1_cov.sample();
+			uart2_cov.sample();
+		
+		end
+	endtask
+	
+/*	task lsr_decode(uart_xtn t_xtn, uart_xtn r_xtn);
+		if (t_xtn.lsr != 0)
+		begin
+			lsr0 = t_xtn.lsr;
+			$display("\n\t ////////////////////////////TRANSMITTER UART LSR////////////////////////////////////// : %d",lsr0);
+		end
+		
+		if (r_xtn.lsr != 0)
+		begin
+			lsr1 = r_xtn.lsr;
+			$display("\n\t ////////////////////////////RECEIVER UART LSR //////////////////////////////////////////// :%d",lsr1);
+		end
+			
+		if (lsr0)
+			decode_lsr(lsr0, "UART_TX");
+		if (lsr1)
+			decode_lsr(lsr1, "UART_RX");		
+	endtask
+*/
+	task decode_lsr(bit [7:0] lsr, string uart_name);
+		
+		if (lsr != 0)	
+			$display("\n\t LSR READING FOR %s are as follows:",uart_name);
+		if (lsr[0])
+			$display("\n\t DATA READY");
+		if (lsr[1])
+                        $display("\n\t OVERRUN ERROR");
+		if (lsr[2])
+                        $display("\n\t PARITY ERROR");
+		if (lsr[3])
+                        $display("\n\t FRAMING ERROR");
+		if (lsr[4])
+                        $display("\n\t BREAK INTERRUPT");
+		if (lsr[5])
+                        $display("\n\t THR EMPTY");
+		if (lsr[6])
+                        $display("\n\t THR + SR EMPTY");
+		if (lsr[7])
+                        $display("\n\t PE/FE/OE/BI -ONE OF THESE");
+
+	endtask
+
+	task checkkk(uart_xtn t_xtn,uart_xtn r_xtn);
+		
+		if(t_xtn.adr_i == 3 && t_xtn.we_i == 1)
+                        lcr0 = t_xtn.lcr;
+                if(t_xtn.adr_i == 3 && t_xtn.we_i == 1) 
+                        lcr1 = t_xtn.lcr;
+		//READ FCR
+                if(t_xtn.adr_i == 2 && t_xtn.we_i == 1 && t_xtn.lcr[7]==0)
+                        fcr0 =t_xtn.fcr;
+                if(r_xtn.adr_i == 2 && r_xtn.we_i == 1 && r_xtn.lcr[7]==0)
+                        fcr1 =r_xtn.fcr;
+		//READ IER
+                if(t_xtn.adr_i == 1 && t_xtn.we_i == 1 && t_xtn.lcr[7]==0)
+                        ier0 =t_xtn.ier;
+                if(r_xtn.adr_i == 1 && r_xtn.we_i == 1 && r_xtn.lcr[7]==0)
+                        ier1 =r_xtn.ier;
+		// READ THR
+		if(t_xtn.adr_i == 0 && t_xtn.we_i == 1 && t_xtn.lcr[7]==0)
+			thr0 = t_xtn.thr;
+		if(t_xtn.adr_i == 0 && t_xtn.we_i == 0 && t_xtn.lcr[7]==0)
+                        rbr0 = t_xtn.rbr;
+		// READ RBR
+		if(r_xtn.adr_i == 0 && r_xtn.we_i == 1 && r_xtn.lcr[7]==0)
+                        thr1 = r_xtn.thr;
+                if(r_xtn.adr_i == 0 && r_xtn.we_i == 0 && r_xtn.lcr[7]==0)
+                        rbr1 = r_xtn.rbr;		
+		// READ MCR
+		if(t_xtn.adr_i == 4 && t_xtn.we_i == 1 && t_xtn.lcr[7]==0)
+                        mcr0 =t_xtn.mcr;
+		if(r_xtn.adr_i == 4 && r_xtn.we_i == 1 && r_xtn.lcr[7]==0)
+                        mcr1 =r_xtn.mcr;
+		//READ IIR
+		if(t_xtn.adr_i == 2 && t_xtn.we_i == 0 && t_xtn.lcr[7]==0)
+                        iir0 =t_xtn.iir;
+                if(r_xtn.adr_i == 2 && r_xtn.we_i == 0 && r_xtn.lcr[7]==0)
+                        iir1 =r_xtn.iir;
+		//READ LSR
+		if(t_xtn.adr_i == 5 && t_xtn.we_i == 0 && t_xtn.lcr[7]==0)
+                        lsr0 =t_xtn.lsr;
+                if(r_xtn.adr_i == 5 && r_xtn.we_i == 0 && r_xtn.lcr[7]==0)
+                        lsr1 =r_xtn.lsr;		
+	endtask
+
+
+	function void check_phase (uvm_phase phase);
+		super.check_phase(phase);
+
+		
+		$display("----------------------------------SCOREBOARD------------------------------");
+                $display("\n\t TX THR : %p",thr0);
+                $display("\n\t RX THR : %p",thr1);
+
+                $display("\n\t TX RBR : %p",rbr0);
+                $display("\n\t RX RBR : %p",rbr1);
+
+		$display("\n\t TX LCR : %p",lcr0);
+                $display("\n\t RX LCR : %p",lcr1);
+
+                $display("\n\t TX MCR : %d,(%b)",mcr0,mcr0);
+                $display("\n\t RX MCR : %d,(%b)",mcr1,mcr1);
+
+                $display("\n\t TX IER : %d,(%b)",ier0,ier0[3:0]);
+                $display("\n\t RX IER : %d,(%b)",ier1,ier1[3:0]);
+
+                $display("\n\t TX IIR : %d,(%b)",iir0,iir0[3:1]);
+                $display("\n\t RX IIR : %d,(%b)",iir1,iir1[3:1]);
+
+                $display("\n\t TX FCR : %d,(%b)\n",fcr0,fcr0);
+                $display("\n\t RX FCR : %d (%b)\n",fcr1,fcr1);
+
+		$display("\n\t TX LSR : %d,(%b)\n",lsr0,lsr0);
+                $display("\n\t RX LSR : %d (%b)\n",lsr1,lsr1);
+	
+		decode_lsr(lsr0,"TX UART");
+		decode_lsr(lsr1,"RX UART");
+	
+////////////////////////////////////////////LOOPBACK CHECK//////////////////////////////////////////////////////////////////////////////////////////////
+               
+		 if(mcr0==16)
+                 begin
+                         if(thr0==rbr0)
+                                 $display("LOOPBACK IN UART1 SUCCESSFUL \n");
+                         else
+                                 $display("LOOPBACK IN UART1 FAILED \n");
+                end
+
+                if(mcr1==16)
+                 begin
+                         if(thr1==rbr1)
+                                 $display("LOOPBACK IN UART1 SUCCESSFUL \n");
+                         else
+                                 $display("LOOPBACK IN UART1 FAILED \n");
+                end
+
+
+//////////////////////////////////////////////////// BREAK INTERRUPT ///////////////////////////////////////////////////////////////////////////////////
+
+		if (lcr1[6] == 1)
+		begin
+			if (lsr1[4] == 1)
+				 $display("\n\t BREAK INTERRUPT IN RX UART \n");
+
+		end
+
+		if (lcr0[6] == 1)
+                begin
+                        if (lsr0[4] == 1)
+                                 $display("\n\t BREAK INTERRUPT IN TX UART \n");
+
+                end
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////// TIMEOUT ERROR /////////////////////////////////////////////////////////////////////////////////
+	
+		if (iir1[3:1] == 6)
+                begin
+                                 $display("\n\t TIMEOUT ERROR IN RX UART \n");
+
+                end
+
+                if (iir0[6] == 6)
+                begin
+                                 $display("\n\t TIMEOUT ERROR IN TX UART \n");
+
+                end
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////// FRAME ERROR ////////////////////////////////////////////////////////////////////////////////////
+
+		if (lsr1[3] == 1)
+                begin
+                                 $display("\n\t FRAME ERROR IN RX UART \n");
+
+                end
+
+                if (lsr0[3] == 1)
+                begin
+                                 $display("\n\t FRAME ERROR IN TX UART \n");
+
+                end
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////// OVERRUN ERROR ////////////////////////////////////////////////////////////////////////////////////
+
+                if (lsr1[1] == 1)
+                begin
+                                 $display("\n\t OVERRUN ERROR IN RX UART \n");
+
+                end
+
+                if (lsr0[1] == 1)
+                begin
+                                 $display("\n\t OVERRUN ERROR IN TX UART \n");
+
+                end
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////// FULL DUPLEX SEQUENCE ///////////////////////////////////////////////////////////////////////////
+
+                if (mcr0[4]!=16 && mcr1[4]!=16)
+                begin
+			if (thr0 == rbr1 && thr1 == rbr0)
+                                 $display("\n\t FULL DUPLEX SUCCESSFUL \n");
+
+                end
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+		// FULL DUPLEX
+
+        /*      if ()
+                begin
+                        if (thr0 == rbr1)
+                        begin
+                                $display("UART 1 - UART 2 TRANSFER SUCCESSFUL");
+                                $display("DATA SENT BY UART-1:%p",thr0);
+                                $display("DATA RECEIVED BY UART-2:%p",rbr1);
+                        end
+                        else
+                                $display("FAILED");
+
+                        if ( rbr0 == thr1)
+                        begin
+                                $display("UART 2 - UART 1 TRANSFER SUCCESSFUL");
+                                $display("DATA SENT BY UART-2:%p",thr1);
+                                $display("DATA RECEIVED BY UART-1:%p",rbr0);
+                        end
+                        else
+                                $display("FAILED");
+                end
+                //LOOPBACK CHECK
+
+                if(t_xtn.mcr==16)
+                begin
+                        if(thr0==rbr0)
+                                $display("LOOPBACK IN UART1 SUCCESSFUL \n");
+                        else
+                                $display("LOOPBACK IN UART1 FAILED \n");
+                end
+
+        */
+
+	endfunction
+
+endclass

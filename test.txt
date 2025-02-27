@@ -1,0 +1,322 @@
+`define no_of_agts 2   // NUMBER OF AGENTS
+
+class uart_test extends uvm_test;
+    `uvm_component_utils(uart_test)
+    function new(string name = "uart_test",uvm_component parent);
+        super.new(name,parent);
+    endfunction
+
+    uart_env env_h;
+    env_cfg ec_h;   // env config handle
+    agt_cfg ac_h[];	
+//  virtual_sequencer vsqr;
+	
+
+    function void build_phase(uvm_phase phase);
+//  	super.build_phase(phase);     
+        // GET INTERFACE FROM TOP AND SET INTO ENV CONFIG
+
+        // CREATE AND CONFIGURE ENV CONFIG.
+       	    	// 1. CREATING ENV CONFIG
+		
+			ec_h = env_cfg::type_id::create("ec_h");
+       	 		
+			ac_h = new[`no_of_agts];
+			foreach (ac_h[i])
+				ac_h[i] = agt_cfg::type_id::create($sformatf("ac_h[%0d]",i));
+		
+		// 2. CONFIGURING ENV CONFIG
+		
+			ec_h.n_agts = `no_of_agts;
+			ec_h.ac_h = new[`no_of_agts];
+			
+			if(!uvm_config_db#(virtual uart_if)::get(this,"","uart_if_tx",ac_h[0].vif)) // AGENT0 - TX
+				`uvm_fatal("TEST","FAILED TO GET INTERFACE")
+			if(!uvm_config_db#(virtual uart_if)::get(this,"","uart_if_rx",ac_h[1].vif)) // AGENT1 - RX
+				`uvm_fatal("TEST","FAILED TO GET INTERFACE")
+		
+			foreach (ac_h[i])
+				ec_h.ac_h[i] = ac_h[i];
+		
+			// OR SIMPLY,	 	ec_h.ac_h = ac_h;
+
+	// SET ENV CONFIG FOR TB
+        uvm_config_db #(env_cfg)::set(this,"*","env_cfg",ec_h);
+	super.build_phase(phase);
+        // CREATE ENV
+        env_h = uart_env::type_id::create("env_h",this);
+    
+    endfunction
+
+    function void end_of_elaboration_phase(uvm_phase phase);
+	super.end_of_elaboration_phase(phase);
+	uvm_top.print_topology();
+    endfunction
+endclass
+
+class full_duplex_test extends uart_test;
+	`uvm_component_utils(full_duplex_test)
+	function new(string name = "full_duplex_test", uvm_component parent);
+		super.new(name,parent);
+	endfunction
+	
+//	full_duplex_virtual_sequence fdp_vs;
+
+	function void build_phase(uvm_phase phase);
+		super.build_phase(phase);
+	endfunction
+
+	full_duplex_virtual_sequence fdp_vs;
+	
+	task run_phase(uvm_phase phase);
+		phase.raise_objection(this);
+			fdp_vs = full_duplex_virtual_sequence::type_id::create("fdp_vs");
+			fdp_vs.start(env_h.vsqr);
+			#1000000;
+		phase.drop_objection(this);	
+	endtask 
+
+	function void end_of_elaboration_phase(uvm_phase phase);
+		super.end_of_elaboration_phase(phase);
+	endfunction
+endclass
+
+class half_duplex_test extends uart_test;
+        `uvm_component_utils(half_duplex_test)
+        function new(string name = "half_duplex_test", uvm_component parent);
+                super.new(name,parent);
+        endfunction
+
+//      full_duplex_virtual_sequence fdp_vs;
+
+        function void build_phase(uvm_phase phase);
+                super.build_phase(phase);
+        endfunction
+
+        half_duplex_virtual_sequence hdp_vs;
+
+        task run_phase(uvm_phase phase);
+                phase.raise_objection(this);
+                        hdp_vs = half_duplex_virtual_sequence::type_id::create("hdp_vs");
+                        hdp_vs.start(env_h.vsqr);
+                        #1000000;
+                phase.drop_objection(this);
+        endtask
+
+        function void end_of_elaboration_phase(uvm_phase phase);
+                super.end_of_elaboration_phase(phase);
+        endfunction
+endclass
+
+
+class loopback_test extends uart_test;
+        `uvm_component_utils(loopback_test)
+        function new(string name = "loopback_test", uvm_component parent);
+                super.new(name,parent);
+        endfunction
+
+        function void build_phase(uvm_phase phase);
+                super.build_phase(phase);
+        endfunction
+
+        loopback_virtual_sequence lpb_vs;
+
+        task run_phase(uvm_phase phase);
+                phase.raise_objection(this);
+                        lpb_vs = loopback_virtual_sequence::type_id::create("lpb_vs");
+                        lpb_vs.start(env_h.vsqr);
+                        #1000000;
+                phase.drop_objection(this);
+        endtask
+
+        function void end_of_elaboration_phase(uvm_phase phase);
+                super.end_of_elaboration_phase(phase);
+        endfunction
+endclass
+
+
+class parity_test extends uart_test;
+        `uvm_component_utils(parity_test)
+        function new(string name = "parity_test", uvm_component parent);
+                super.new(name,parent);
+        endfunction
+
+        function void build_phase(uvm_phase phase);
+                super.build_phase(phase);
+        endfunction
+
+        parity_virtual_sequence parity_vs;
+
+        task run_phase(uvm_phase phase);
+                phase.raise_objection(this);
+                        parity_vs = parity_virtual_sequence::type_id::create("parity_vs");
+                        parity_vs.start(env_h.vsqr);
+                        #1000000;
+                phase.drop_objection(this);
+        endtask
+
+        function void end_of_elaboration_phase(uvm_phase phase);
+                super.end_of_elaboration_phase(phase);
+        endfunction
+endclass
+
+
+//--------------------------- OVERRUN------------------------------------------------------------------------
+
+class overrun_test extends uart_test;
+        `uvm_component_utils(overrun_test)
+        function new(string name = "overrun_test", uvm_component parent);
+                super.new(name,parent);
+        endfunction
+
+        function void build_phase(uvm_phase phase);
+                super.build_phase(phase);
+        endfunction
+
+        overrun_virtual_sequence overrun_vs;
+
+        task run_phase(uvm_phase phase);
+                phase.raise_objection(this);
+                        overrun_vs = overrun_virtual_sequence::type_id::create("overrun_vs");
+                        overrun_vs.start(env_h.vsqr);
+                        #1000000;
+                phase.drop_objection(this);
+        endtask
+
+        function void end_of_elaboration_phase(uvm_phase phase);
+                super.end_of_elaboration_phase(phase);
+        endfunction
+endclass
+
+//----------------------------------------------------------------------------------------------------------
+
+
+
+//--------------------------- FRAME ------------------------------------------------------------------------
+
+class frame_test extends uart_test;
+        `uvm_component_utils(frame_test)
+        function new(string name = "frame_test", uvm_component parent);
+                super.new(name,parent);
+        endfunction
+
+        function void build_phase(uvm_phase phase);
+                super.build_phase(phase);
+        endfunction
+
+        frame_virtual_sequence frame_vs;
+
+        task run_phase(uvm_phase phase);
+                phase.raise_objection(this);
+                        frame_vs = frame_virtual_sequence::type_id::create("frame_vs");
+                        frame_vs.start(env_h.vsqr);
+                        #1000000;
+                phase.drop_objection(this);
+        endtask
+
+        function void end_of_elaboration_phase(uvm_phase phase);
+                super.end_of_elaboration_phase(phase);
+        endfunction
+endclass
+
+//----------------------------------------------------------------------------------------------------------
+
+
+
+//--------------------------- BREAK INTERRUPT------------------------------------------------------------------------
+
+class break_test extends uart_test;
+        `uvm_component_utils(break_test)
+        function new(string name = "break_test", uvm_component parent);
+                super.new(name,parent);
+        endfunction
+
+        function void build_phase(uvm_phase phase);
+                super.build_phase(phase);
+        endfunction
+
+        break_virtual_sequence break_vs;
+
+        task run_phase(uvm_phase phase);
+                phase.raise_objection(this);
+                        break_vs = break_virtual_sequence::type_id::create("break_vs");
+                        break_vs.start(env_h.vsqr);
+                        #1000000;
+                phase.drop_objection(this);
+        endtask
+
+        function void end_of_elaboration_phase(uvm_phase phase);
+                super.end_of_elaboration_phase(phase);
+        endfunction
+endclass
+
+//----------------------------------------------------------------------------------------------------------
+
+
+
+//--------------------------- TIMEOUT------------------------------------------------------------------------
+
+class timeout_test extends uart_test;
+        `uvm_component_utils(timeout_test)
+        function new(string name = "timeout_test", uvm_component parent);
+                super.new(name,parent);
+        endfunction
+
+        function void build_phase(uvm_phase phase);
+                super.build_phase(phase);
+        endfunction
+
+        timeout_virtual_sequence timeout_vs;
+
+        task run_phase(uvm_phase phase);
+                phase.raise_objection(this);
+                        timeout_vs = timeout_virtual_sequence::type_id::create("timeout_vs");
+                        timeout_vs.start(env_h.vsqr);
+                        #1000000;
+                phase.drop_objection(this);
+        endtask
+
+        function void end_of_elaboration_phase(uvm_phase phase);
+                super.end_of_elaboration_phase(phase);
+        endfunction
+endclass
+
+//----------------------------------------------------------------------------------------------------------
+
+
+
+//--------------------------- THR EMPTY------------------------------------------------------------------------
+
+class thr_empty_test extends uart_test;
+        `uvm_component_utils(thr_empty_test)
+        function new(string name = "thr_empty_test", uvm_component parent);
+                super.new(name,parent);
+        endfunction
+
+        function void build_phase(uvm_phase phase);
+                super.build_phase(phase);
+        endfunction
+
+        thr_empty_virtual_sequence thr_empty_vs;
+
+        task run_phase(uvm_phase phase);
+                phase.raise_objection(this);
+                        thr_empty_vs = thr_empty_virtual_sequence::type_id::create("thr_empty_vs");
+                        thr_empty_vs.start(env_h.vsqr);
+                        #1000000;
+                phase.drop_objection(this);
+        endtask
+
+        function void end_of_elaboration_phase(uvm_phase phase);
+                super.end_of_elaboration_phase(phase);
+        endfunction
+endclass
+
+//----------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+ 

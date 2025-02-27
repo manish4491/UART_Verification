@@ -1,0 +1,9 @@
+class agt_cfg extends uvm_object;
+        `uvm_object_utils(agt_cfg)
+        function new (string name = "agt_cfg");
+                super.new(name);
+        endfunction
+
+        virtual uart_if vif;
+
+endclass

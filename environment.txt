@@ -1,0 +1,47 @@
+class uart_env extends uvm_env;
+    `uvm_component_utils(uart_env)
+    function new(string name = "uart_env", uvm_component parent);
+        super.new(name,parent);
+    endfunction
+
+    env_cfg ec_h;
+    uart_agt ag_h[]; 
+    uart_sb sb_h;
+    virtual_sequencer vsqr;
+
+    function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        if(!uvm_config_db #(env_cfg)::get(this,"","env_cfg",ec_h))
+            `uvm_fatal("ENV","FAILED TO GET ENV CONFIG")
+
+        vsqr = virtual_sequencer::type_id::create("vsqr",this);
+//	vsqr.sqr_h = new[ec_h.n_agts];
+
+        // AGENTS CREATION
+        ag_h = new[ec_h.n_agts];
+
+//	foreach         
+	foreach(ag_h[i])
+	begin
+	    uvm_config_db#(agt_cfg)::set(this,  $sformatf("ag_h[%0d]*",i)  ,  "agt_cfg",  ec_h.ac_h[i]);
+	    ag_h[i] = uart_agt::type_id::create($sformatf("ag_h[%0d]",i),this);
+	end
+	
+    	sb_h = uart_sb::type_id::create("sb_h",this);
+
+    endfunction    
+
+    function void connect_phase(uvm_phase phase);
+        super.connect_phase(phase);
+
+        foreach(vsqr.sqr_h[i])
+	begin
+	// CONNECTION BETWEEN VIRTUAL SEQUENCER AND AGENT SEQUENCER
+            vsqr.sqr_h[i] = ag_h[i].sqr_h;
+	// CONNECTION BETWEEN MONITOR ANALYSIS PORT AND SB ANALYSIS FIFO
+	    ag_h[i].m_h.ap_h.connect(sb_h.a_fifo[i].analysis_export);
+ 	end
+
+    endfunction
+endclass

@@ -1,0 +1,231 @@
+class virtual_sequence extends uvm_sequence#(uvm_sequence_item);
+	`uvm_object_utils(virtual_sequence)
+	function new(string name = "virtual_sequence");
+		super.new(name);
+	endfunction 
+
+	virtual_sequencer vsqr;
+	uart_sqr usqr[];
+	
+	full_duplex_sequence fdps_tx;
+	full_duplex_rx_sequence fdps_rx;
+	
+	half_duplex_sequence hdps_tx;
+        half_duplex_rx_sequence hdps_rx;
+
+	loopback_sequence lpb_ts;
+	loopback_rx_sequence lpb_rs;
+
+	parity_sequence	parity_tx;
+	parity_rx_sequence parity_rx;
+
+	overrun_sequence overrun_tx;
+        overrun_rx_sequence overrun_rx;
+
+	frame_sequence frame_tx;
+        frame_rx_sequence frame_rx;
+
+	break_sequence break_tx;
+        break_rx_sequence break_rx;
+
+	timeout_sequence timeout_tx;
+        timeout_rx_sequence timeout_rx;
+
+	thr_empty_sequence thr_empty_tx;
+        thr_empty_rx_sequence thr_empty_rx;
+
+	env_cfg ec_h;
+
+	task body();
+
+		//CASTING M_SEQUENCER(WHICH CONTAINS POINTER TO ACTUAL VIRTUAL SEQUENCER) TO LOCAL VIRTUAL SEQUENCER HANDLE
+		assert($cast(vsqr,m_sequencer))
+		else	`uvm_error(get_full_name(),"virtual sequencer pointer cast failed")
+		
+		//GETTING CONFIGURATION FOR NUMBER OF SEQUENCERS AND SEQUENCES
+		if(!uvm_config_db#(env_cfg)::get(null,get_full_name(),"env_cfg",ec_h))
+			`uvm_fatal("VIRTUAL SEQUENCE", "FAILED TO GET CFG")
+
+		usqr = new [ec_h.n_agts];
+
+		// CONNECTING LOCAL SEQUENCERS TO ACTUAL SEQUENCERS VIA M_SEQUENCER AND VIRTUAL_SEQUENCER RESPECTIVELY
+		foreach (usqr[i])
+			usqr[i] = vsqr.sqr_h[i];
+	endtask 
+endclass
+
+class full_duplex_virtual_sequence extends virtual_sequence;
+	`uvm_object_utils(full_duplex_virtual_sequence)
+	function new(string name = "full_duplex_virtual_sequence");
+		super.new(name);
+	endfunction
+
+	task body();
+		super.body();
+			fdps_tx = full_duplex_sequence::type_id::create("fdps_tx");
+			fdps_rx = full_duplex_rx_sequence::type_id::create("fdps_rx");
+                fork 
+			fdps_tx.start(usqr[0]);
+			fdps_rx.start(usqr[1]);
+		join
+	endtask
+endclass
+
+class half_duplex_virtual_sequence extends virtual_sequence;
+        `uvm_object_utils(half_duplex_virtual_sequence)
+        function new(string name = "half_duplex_virtual_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                super.body();
+                        hdps_tx = half_duplex_sequence::type_id::create("hdps_tx");
+                        hdps_rx = half_duplex_rx_sequence::type_id::create("hdps_rx");
+//       	fork	 
+	                hdps_tx.start(usqr[0]);
+                        hdps_rx.start(usqr[1]);
+  //      join	
+	endtask
+endclass
+
+class loopback_virtual_sequence extends virtual_sequence;
+        `uvm_object_utils(loopback_virtual_sequence)
+        function new(string name = "loopback_virtual_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                super.body();
+                        lpb_ts = loopback_sequence::type_id::create("lpb_ts");
+                	lpb_rs = loopback_rx_sequence::type_id::create("lpb_rs");
+		fork
+                        lpb_ts.start(usqr[0]);
+                	lpb_rs.start(usqr[1]);
+		join
+        endtask
+endclass
+
+class parity_virtual_sequence extends virtual_sequence;
+        `uvm_object_utils(parity_virtual_sequence)
+        function new(string name = "parity_virtual_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                super.body();
+                        parity_tx = parity_sequence::type_id::create("parity_tx");
+                        parity_rx = parity_rx_sequence::type_id::create("parity_rx");
+                fork
+                        parity_tx.start(usqr[0]);
+                        parity_rx.start(usqr[1]);
+                join
+        endtask
+endclass
+
+
+
+
+//-----------------------------OVERRUN------------------------------------------------------------------------------
+
+class overrun_virtual_sequence extends virtual_sequence;
+        `uvm_object_utils(overrun_virtual_sequence)
+        function new(string name = "overrun_virtual_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                super.body();
+                        overrun_tx = overrun_sequence::type_id::create("overrun_tx");
+                        overrun_rx = overrun_rx_sequence::type_id::create("overrun_rx");
+                fork
+                        overrun_tx.start(usqr[0]);
+                        overrun_rx.start(usqr[1]);
+                join
+        endtask
+endclass
+
+//------------------------------------------------------------------------------------------------------------------
+
+//-----------------------------FRAME------------------------------------------------------------------------------
+
+class frame_virtual_sequence extends virtual_sequence;
+        `uvm_object_utils(frame_virtual_sequence)
+        function new(string name = "frame_virtual_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                super.body();
+                        frame_tx = frame_sequence::type_id::create("frame_tx");
+                        frame_rx = frame_rx_sequence::type_id::create("frame_rx");
+                fork
+                        frame_tx.start(usqr[0]);
+                        frame_rx.start(usqr[1]);
+                join
+        endtask
+endclass
+
+//------------------------------------------------------------------------------------------------------------------
+
+//-----------------------------BREAK INTERRUPT------------------------------------------------------------------------------
+
+class break_virtual_sequence extends virtual_sequence;
+        `uvm_object_utils(break_virtual_sequence)
+        function new(string name = "break_virtual_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                super.body();
+                        break_tx = break_sequence::type_id::create("break_tx");
+                        break_rx = break_rx_sequence::type_id::create("break_rx");
+                fork
+                        break_tx.start(usqr[0]);
+                        break_rx.start(usqr[1]);
+                join
+        endtask
+endclass
+
+//------------------------------------------------------------------------------------------------------------------
+
+//-----------------------------TIMEOUT------------------------------------------------------------------------------
+
+class timeout_virtual_sequence extends virtual_sequence;
+        `uvm_object_utils(timeout_virtual_sequence)
+        function new(string name = "timeout_virtual_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                super.body();
+                        timeout_tx = timeout_sequence::type_id::create("timeout_tx");
+                        timeout_rx = timeout_rx_sequence::type_id::create("timeout_rx");
+                fork
+                        timeout_tx.start(usqr[0]);
+                        timeout_rx.start(usqr[1]);
+                join
+        endtask
+endclass
+
+//------------------------------------------------------------------------------------------------------------------
+
+//-----------------------------THR EMPTY------------------------------------------------------------------------------
+
+class thr_empty_virtual_sequence extends virtual_sequence;
+        `uvm_object_utils(thr_empty_virtual_sequence)
+        function new(string name = "thr_empty_virtual_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                super.body();
+                        thr_empty_tx = thr_empty_sequence::type_id::create("thr_empty_tx");
+                        thr_empty_rx = thr_empty_rx_sequence::type_id::create("thr_empty_rx");
+                fork
+                        thr_empty_tx.start(usqr[0]);
+                        thr_empty_rx.start(usqr[1]);
+                join
+        endtask
+endclass
+
+//------------------------------------------------------------------------------------------------------------------

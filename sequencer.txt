@@ -1,0 +1,6 @@
+class uart_sqr extends uvm_sequencer#(uart_xtn);        //PARAMETERIZE WITH TRANSACTION CLASS
+    `uvm_component_utils(uart_sqr)
+    function new(string name="uart_sqr",uvm_component parent);
+        super.new(name,parent);
+    endfunction
+endclass

@@ -1,0 +1,12 @@
+class virtual_sequencer extends uvm_sequencer#(uvm_sequence_item);	// PARAMETERIZE WITH UVM_SEQUENCE_ITEM
+    `uvm_component_utils(virtual_sequencer)
+    uart_sqr sqr_h[];
+    env_cfg ec_h; 
+    function new(string name = "virtual_sequencer",uvm_component parent);
+        super.new(name,parent);
+    	if(!uvm_config_db#(env_cfg)::get(this,"","env_cfg",ec_h))
+		`uvm_fatal("VSEQR","FAILED TO GET ENV CFG")
+	sqr_h = new[ec_h.n_agts];
+    endfunction
+    
+endclass

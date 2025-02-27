@@ -1,0 +1,89 @@
+class uart_drv extends uvm_driver#(uart_xtn);	// PARAMETERIZE WITH TRANSACTION CLASS
+    `uvm_component_utils(uart_drv)
+    function new(string name="uart_drv",uvm_component parent);
+        super.new(name,parent);
+    endfunction
+
+    agt_cfg ac_h;
+    virtual uart_if.DRV_MP vif0;
+
+    function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+       
+        if(!uvm_config_db#(agt_cfg)::get(this,"","agt_cfg",ac_h))
+            `uvm_fatal("DRIVER","CANNOT GET INTERFACE")
+    
+    endfunction
+
+    function void connect_phase(uvm_phase phase);
+        super.connect_phase(phase);
+   		vif0 = ac_h.vif;
+    endfunction
+	
+    task run_phase(uvm_phase phase);
+	// ENABLE RESET	
+	@(vif0.DRV_CB);
+		vif0.DRV_CB.wb_rst_i <= 1'b0;
+	
+	@(vif0.DRV_CB);
+                vif0.DRV_CB.wb_rst_i <= 1'b1;
+
+		vif0.DRV_CB.wb_stb_i <= 1'b0;
+		vif0.DRV_CB.wb_cyc_i <= 1'b0;
+
+	// DISABLE RESET
+	@(vif0.DRV_CB);
+		vif0.DRV_CB.wb_rst_i <= 1'b0;
+	        vif0.DRV_CB.wb_stb_i <= 1'b0;
+                vif0.DRV_CB.wb_cyc_i <= 1'b0;
+
+	$display("\n\t DRIVER RESET DONE");
+	forever
+	begin
+		req = uart_xtn::type_id::create("req");
+		seq_item_port.get_next_item(req);
+		drive(req);
+		$display("\n\t ===========================DRIVEN DATA===============================\n");
+		`uvm_info("DRIVER", $sformatf("\n  \n %s",req.sprint()),UVM_LOW)
+		$display("\n\t ===========================-----------===============================\n");
+//		$display("\n\t ======================================================================\n");
+		seq_item_port.item_done();
+		
+	end
+    endtask 
+
+    task drive (uart_xtn xtn);
+	// DRIVING 
+	@(vif0.DRV_CB);
+		vif0.DRV_CB.wb_adr_i <= xtn.adr_i;
+		vif0.DRV_CB.wb_we_i  <= xtn.we_i;
+		vif0.DRV_CB.wb_dat_i <= xtn.dat_i;
+		vif0.DRV_CB.wb_sel_i <= 4'b0001;	
+		vif0.DRV_CB.wb_stb_i <= 1'b1;
+		vif0.DRV_CB.wb_cyc_i <= 1'b1;
+	
+
+    	// GETTING ACKNOWLEDGEMENT ABOUT THE RECEPTION OF ABOVE DATA FROM THE UART BEFORE MAKING STROBE AND CYCLE ZERO 
+	wait (vif0.DRV_CB.wb_ack_o);
+//###	while (!vif0.DRV_CB.wb_ack_o);
+		vif0.DRV_CB.wb_stb_i <= 1'b0;
+                vif0.DRV_CB.wb_cyc_i <= 1'b0;	
+	
+	// READING INTERRUPT IDENTIFICATION REGISTER "IF" THE ADDRESS AND WE DRIVEN CORRESPONDS TO IIR 
+	if (xtn.adr_i == 2 && xtn.we_i == 0)
+	begin
+	
+		wait (vif0.DRV_CB.int_o);
+//###		while (!vif0.DRV_CB.int_o);
+			@(vif0.DRV_CB);
+			@(vif0.DRV_CB);
+			
+
+		xtn.iir = vif0.DRV_CB.wb_dat_o;  // WAITING FOR 2 CCs BECAUSE DAT_0 IS SAMPLED FROM THE OUTPUT OF UART.
+		seq_item_port.put_response(xtn);
+	end
+		$display("\n\t ==========================OUT OF DRIVE============================================\n");
+    endtask
+    
+
+endclass

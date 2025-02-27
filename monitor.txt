@@ -1,0 +1,102 @@
+class uart_mon extends uvm_monitor;
+    `uvm_component_utils(uart_mon)
+
+    uvm_analysis_port #(uart_xtn) ap_h;     //PATAMETERIZE WITH TRANSACTION CLASS
+
+    function new(string name = "uart_mon", uvm_component parent);
+        super.new(name,parent);
+	ap_h = new ("ap_h",this);
+    endfunction
+
+    // GET INTERFACE    
+ //   virtual uart_if vif;
+    agt_cfg ac_h;
+    virtual uart_if.MON_MP vif0;    
+
+    function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        if(!uvm_config_db#(agt_cfg)::get(this,"","agt_cfg",ac_h))
+            `uvm_fatal("MONITOR","CANNOT GET INTERFACE")
+        
+    endfunction
+
+    function void connect_phase(uvm_phase phase);
+        super.connect_phase(phase);
+        	vif0 = ac_h.vif;
+    endfunction
+
+    task run_phase (uvm_phase phase);
+	forever 
+	begin
+		collect();
+	end
+    endtask
+
+    task collect();
+
+	uart_xtn xtn;
+	xtn = uart_xtn::type_id::create("xtn");
+  	
+	
+	// SAMPLING LOGIC
+	@(vif0.MON_CB);
+	@(vif0.MON_CB);
+		wait (vif0.MON_CB.wb_ack_o);       // CB AFTER WAIT - TRYY!!
+//###		while (!vif0.MON_CB.wb_ack_o);
+		xtn.we_i     = vif0.MON_CB.wb_we_i;
+		xtn.adr_i    = vif0.MON_CB.wb_adr_i;
+		xtn.dat_i    = vif0.MON_CB.wb_dat_i;
+		xtn.dat_o    = vif0.MON_CB.wb_dat_o;
+	// SPECIAL CASES
+
+	//LCR
+	if (vif0.MON_CB.wb_adr_i == 3 && vif0.MON_CB.wb_we_i == 1)
+                xtn.lcr = vif0.MON_CB.wb_dat_i;
+	$display("-------------------------------1----------------------------------------------------");
+	//MCR
+	if (vif0.MON_CB.wb_adr_i == 4 && vif0.MON_CB.wb_we_i == 1 && xtn.lcr[7] == 0)
+                xtn.mcr = vif0.MON_CB.wb_dat_i;
+	$display("-------------------------------2---------------------------------------------------");
+	// RBR
+        if (vif0.MON_CB.wb_adr_i == 0 && vif0.MON_CB.wb_we_i == 0 && xtn.lcr[7] == 0)   //we - 0 RBR
+                xtn.rbr.push_back(vif0.MON_CB.wb_dat_o);
+	$display("-------------------------------3----------------------------------------------------");
+        // THR
+        if (vif0.MON_CB.wb_adr_i == 0 && vif0.MON_CB.wb_we_i == 1 && xtn.lcr[7] == 0)     // we - 1 THR
+                xtn.thr.push_back(vif0.MON_CB.wb_dat_i);
+	$display("-------------------------------4----------------------------------------------------");
+        // THR
+        if (vif0.MON_CB.wb_adr_i == 5 && vif0.MON_CB.wb_we_i == 0 && xtn.lcr[7] == 0)     // we - 1 THR
+                xtn.lsr = vif0.MON_CB.wb_dat_o;
+        $display("-------------------------------4.5----------------------------------------------------");
+	//IER - addr : 1
+         if (vif0.MON_CB.wb_adr_i == 1 && vif0.MON_CB.wb_we_i == 1 && xtn.lcr[7] == 0)
+                xtn.ier = vif0.MON_CB.wb_dat_i;
+		$display("-------------------------------5----------------------------------------------------");
+        //FCR - addr : 2
+         if (vif0.MON_CB.wb_adr_i == 2 && vif0.MON_CB.wb_we_i == 1 && xtn.lcr[7] == 0)
+                xtn.fcr = vif0.MON_CB.wb_dat_i;
+	$display("-------------------------------6----------------------------------------------------");
+         //IIR - addr : 2
+         if (vif0.MON_CB.wb_adr_i == 2 && vif0.MON_CB.wb_we_i == 0) // && xtn.lcr[7] == 0)
+         begin
+		
+		$display("-------------------------------6.5----------------------------------------------------");
+		// xtn.iir = vif0.MON_CB.wb_dat_o;
+                wait(vif0.MON_CB.int_o);      // when iir is ready int_o will be high
+//###		while(!vif0.MON_CB.int_o);
+			 @(vif0.MON_CB);     
+ 			 @(vif0.MON_CB);             // wait for 1 clock cycle
+                xtn.iir = vif0.MON_CB.wb_dat_o;  // again collect
+	end
+	$display("-------------------------------7----------------------------------------------------");
+
+	ap_h.write(xtn);
+
+	$display("-------------------------------MONITOR----------------------------------------------------");
+	`uvm_info("MONITOR", $sformatf("\n\t MONITOR DATA \n %s",xtn.sprint()),UVM_LOW)
+	$display("------------------------------------------------------------------------------------------");
+    endtask
+
+endclass

@@ -1,0 +1,49 @@
+class uart_xtn extends uvm_sequence_item;
+	`uvm_object_utils(uart_xtn)
+	function new(string name = "uart_xtn");
+		super.new(name);
+	endfunction
+
+	rand bit[2:0] adr_i;
+	rand bit[7:0] dat_i;
+	rand bit we_i;
+ 	bit rst_i;
+	bit dat_o;
+	bit [3:0]sel;
+	bit stb_i;
+	bit cyc_i;
+	bit [7:0] ier; // RW
+	bit [7:0] iir; // R
+	bit [7:0] fcr; // W
+	bit [7:0] lcr; // RW
+	bit [7:0] lsr; // R
+//	bit [15:0] dlr;  // DIVISOR LATCH REGISTER-16 BIT REGISTER OR 2 8 BIT REGISTERS?
+	bit [7:0] thr[$]; // R
+	bit [7:0] rbr[$]; // W
+ 	bit [7:0] mcr;
+
+	
+	function void do_print(uvm_printer printer);
+		super.do_print(printer);
+		
+		printer.print_field("ADDRESS",this.adr_i,"3",UVM_DEC);
+		printer.print_field("DATA_IN",this.dat_i,"8",UVM_DEC);
+		printer.print_field("WR_ENB" ,this.we_i ,"1",UVM_DEC);
+		printer.print_field("RESET"  ,this.rst_i,"1",UVM_DEC);
+		printer.print_field("SELECT" ,this.sel  ,"4",UVM_DEC);
+                printer.print_field("STROBE" ,this.stb_i,"1",UVM_DEC);
+                printer.print_field("CYC   " ,this.cyc_i,"1",UVM_DEC);
+                printer.print_field("INTERUPT ENB "  ,this.ier,"8",UVM_DEC);
+		printer.print_field("INTERUPT ID  "  ,this.iir,"8",UVM_DEC);
+		printer.print_field("FIFO CONTROL "  ,this.fcr,"8",UVM_DEC);
+		printer.print_field("LINE CONTROL "  ,this.lcr,"8",UVM_DEC);
+		printer.print_field("LINE STATUS  "  ,this.lsr,"8",UVM_DEC);
+		printer.print_field("MODEM CONTROL  "  ,this.mcr,"8",UVM_DEC);
+		foreach (thr[i])
+			printer.print_field("TRNS HLD REG "  ,this.thr[i],"8",UVM_DEC);
+		foreach (rbr[i])
+			printer.print_field("RCVR BFR REG "  ,this.rbr[i],"8",UVM_DEC);
+		
+	endfunction
+
+endclass : uart_xtn

@@ -1,0 +1,2258 @@
+class uart_seq extends uvm_sequence#(uart_xtn);
+	`uvm_object_utils(uart_seq)
+	function new(string name = "uart_seq");
+		super.new(name);
+	endfunction
+endclass 
+
+class full_duplex_sequence extends uart_seq;
+	`uvm_object_utils(full_duplex_sequence)
+	function new(string name = "full_duplex_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+		req = uart_xtn::type_id::create("req");
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+		$display("\n\t 2 \n\n");
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+							dat_i == 0;
+                                    //    		dat_i == 1;	// MSB BYTE 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		$display("\n\t 3 \n\n");
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                      //                  dat_i == 8'b01000101 ;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                	dat_i == 27;     
+						});
+			`uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 80;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+
+class full_duplex_rx_sequence extends uart_seq;
+	`uvm_object_utils(full_duplex_rx_sequence)
+
+	function new(string name = "full_duplex_rx_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+
+		req = uart_xtn::type_id::create("req");
+	
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("R1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+                                        		dat_i == 0;
+					//		dat_i == 2;	// MSB BYTE 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("R2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                 //       dat_i == 8'b10001010;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                     	dat_i == 54;
+							});
+			`uvm_info("FDPS",$sformatf("R3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("R4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("R5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("R6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 90;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("R9. R-UART Received sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("R10. Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+class half_duplex_sequence extends uart_seq;
+	`uvm_object_utils(half_duplex_sequence)
+	function new(string name = "half_duplex_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+		req = uart_xtn::type_id::create("req");
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+							dat_i == 0;
+                                    //    		dat_i == 1;	// MSB BYTE 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                      //                  dat_i == 8'b01000101 ;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                	dat_i == 27;     
+						});
+			`uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 80;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+//		// SEQUENCE FOR READING IIR 
+//		start_item(req);
+//                assert(req.randomize() with {
+//                                        adr_i == 2;     //FCR/IIR ADDRESS
+//                                        we_i  == 0;     //IIR ADDRESS
+//                                        dat_i == 0;     //ANY DATA
+//                                     });
+//		`uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+//                finish_item(req);
+	
+	endtask:body
+
+endclass 
+
+
+class half_duplex_rx_sequence extends uart_seq;
+	`uvm_object_utils(half_duplex_rx_sequence)
+
+	function new(string name = "half_duplex_rx_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+
+		req = uart_xtn::type_id::create("req");
+	
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("R1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+                                        		dat_i == 0;
+					//		dat_i == 2;	// MSB BYTE 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("R2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                 //       dat_i == 8'b10001010;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                     	dat_i == 54;
+							});
+			`uvm_info("FDPS",$sformatf("R3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("R4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("R5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("R6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+       //         start_item(req);
+        //        assert(req.randomize() with {
+          //                              adr_i == 0;     //THR/RBR ADDRESS
+          //                              we_i  == 1;	//THR ADDRESS
+          //                              dat_i == 90;    //ANY DATA
+          //                           });
+	//	`uvm_info("FDPS",$sformatf("R7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+          //      finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("R9. R-UART Received sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("R10. Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+class loopback_sequence extends uart_seq;
+        `uvm_object_utils(loopback_sequence)
+        function new(string name = "loopback_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                req = uart_xtn::type_id::create("req");
+                // SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 128;   // 10000000  MSB 1 to select DL registers
+                                     });
+                `uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+                $display("\n\t 2 \n\n");
+                // DL REGISTER SELECTED
+                        // 1. SETTING DLR MSB BYTE
+                        start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 1;     // 1 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                        dat_i == 0;
+                                    //                  dat_i == 1;     // MSB BYTE 0;
+                                                     });
+                        `uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                $display("\n\t 3 \n\n");
+                        // 2. SETTING DLR LSB BYTE
+                        start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                      //                  dat_i == 8'b01000101 ;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                        dat_i == 27;
+                                                });
+                        `uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+
+                // SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+                `uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;     //FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;     //00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+                `uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+                `uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// MCR SEQUENCE
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 4;     //THR/RBR ADDRESS
+                                        we_i  == 1;     //THR ADDRESS
+                                        dat_i == 16;    //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("T7. Printing from MCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;     //THR ADDRESS
+                                        dat_i == 80;    //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SEQUENCE FOR READING IIR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                //GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+                get_response(req);   // REQ FINE?
+
+                //PROCESS THE RESPONSE
+                if(req.iir[3:1] == 3'b010)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;
+                                     });
+                        `uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+
+                if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;
+                                        dat_i == 0;
+                                     });
+                        `uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+        endtask:body
+
+
+
+
+endclass
+
+class loopback_rx_sequence extends uart_seq;
+        `uvm_object_utils(loopback_rx_sequence)
+        function new(string name = "loopback_rx_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                req = uart_xtn::type_id::create("req");
+                // SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 128;   // 10000000  MSB 1 to select DL registers
+                                     });
+                `uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+                $display("\n\t 2 \n\n");
+                // DL REGISTER SELECTED
+                        // 1. SETTING DLR MSB BYTE
+                        start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 1;     // 1 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                        dat_i == 0;
+                                    //                  dat_i == 1;     // MSB BYTE 0;
+                                                     });
+                        `uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                $display("\n\t 3 \n\n");
+                        // 2. SETTING DLR LSB BYTE
+                        start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                      //                  dat_i == 8'b01000101 ;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                        dat_i == 54;
+                                                });
+                        `uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+
+                // SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+                `uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;     //FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;     //00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+                `uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+                `uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// MCR SEQUENCE
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 4;     //THR/RBR ADDRESS
+                                        we_i  == 1;     //THR ADDRESS
+                                        dat_i == 16;    //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("T7. Printing from MCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;     //THR ADDRESS
+                                        dat_i == 90;    //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SEQUENCE FOR READING IIR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                //GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+                get_response(req);   // REQ FINE?
+
+                //PROCESS THE RESPONSE
+                if(req.iir[3:1] == 3'b010)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;
+                                     });
+                        `uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+
+                if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;
+                                        dat_i == 0;
+                                     });
+                        `uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+        endtask:body
+
+endclass
+	// PARITY ERROR SEQUENCES
+
+	class parity_sequence extends uart_seq;
+        `uvm_object_utils(parity_sequence)
+        function new(string name = "parity_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+                req = uart_xtn::type_id::create("req");
+                // SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 128;   // 10000000  MSB 1 to select DL registers
+                                     });
+                `uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+                $display("\n\t 2 \n\n");
+                // DL REGISTER SELECTED
+                        // 1. SETTING DLR MSB BYTE
+                        start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 1;     // 1 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                        dat_i == 0;
+                                    //                  dat_i == 1;     // MSB BYTE 0;
+                                                     });
+                        `uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                $display("\n\t 3 \n\n");
+                        // 2. SETTING DLR LSB BYTE
+                        start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                        dat_i == 27;
+                                                });
+                        `uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+
+                // SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 27;     //00011011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+                `uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;     //FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;     //00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+                `uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+                `uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;     //THR ADDRESS
+                                        dat_i == 12;    //ANY EVEN PARITY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SEQUENCE FOR READING IIR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                //GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+                get_response(req);   // REQ FINE?
+
+                //PROCESS THE RESPONSE
+                if(req.iir[3:1] == 3'b010)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;
+                                     });
+                        `uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+
+                if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;
+                                        dat_i == 0;
+                                     });
+                        `uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+        endtask:body
+
+endclass
+
+
+class parity_rx_sequence extends uart_seq;
+        `uvm_object_utils(parity_rx_sequence)
+
+        function new(string name = "parity_rx_sequence");
+                super.new(name);
+        endfunction
+
+        task body();
+
+                req = uart_xtn::type_id::create("req");
+
+                // SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 128;   // 10000000  MSB 1 to select DL registers
+                                     });
+                `uvm_info("FDPS",$sformatf("R1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // DL REGISTER SELECTED
+                        // 1. SETTING DLR MSB BYTE
+                        start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 1;     // 1 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                        dat_i == 0;
+                                        //              dat_i == 2;     // MSB BYTE 0;
+                                                     });
+                        `uvm_info("FDPS",$sformatf("R2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+
+                        // 2. SETTING DLR LSB BYTE
+                        start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                 //       dat_i == 8'b10001010;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                        dat_i == 54;
+                                                        });
+                        `uvm_info("FDPS",$sformatf("R3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+
+                // SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 11;     //00010011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+                `uvm_info("FDPS",$sformatf("R4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;     //FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;     //00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+                `uvm_info("FDPS",$sformatf("R5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+                `uvm_info("FDPS",$sformatf("R6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;     //THR ADDRESS
+                                        dat_i == 90;    //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("R7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                // SEQUENCE FOR READING IIR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+                `uvm_info("FDPS",$sformatf("R8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+                //GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+                get_response(req);   // REQ FINE?
+
+                //PROCESS THE RESPONSE
+                if(req.iir[3:1] == 3'b010)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;
+                                     });
+                        `uvm_info("FDPS",$sformatf("R9. R-UART Received sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+
+                if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;
+                                        dat_i == 0;
+                                     });
+                        `uvm_info("FDPS",$sformatf("R10. Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+        endtask:body
+
+endclass
+
+//----------------------------------------OVERRUN SEQUENCE------------------------------------------------------------------------------------------------
+
+class overrun_sequence extends uart_seq;
+	`uvm_object_utils(overrun_sequence)
+	function new(string name = "overrun_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+		req = uart_xtn::type_id::create("req");
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+		
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+							dat_i == 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                	dat_i == 27;     
+						});
+			`uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS(1)
+                                     });
+		`uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                
+		repeat (3)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 80;    //ANY DATA
+                                     });
+			`uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end 
+
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE FROM IIR
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)   // PARITY/OVERRUN/FRAMING/BREAK
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+		
+		
+
+	endtask:body
+
+endclass 
+
+
+class overrun_rx_sequence extends uart_seq;
+	`uvm_object_utils(overrun_rx_sequence)
+
+	function new(string name = "overrun_rx_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+
+		req = uart_xtn::type_id::create("req");
+	
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("R1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+                                        		dat_i == 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("R2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                     	dat_i == 54;
+							});
+			`uvm_info("FDPS",$sformatf("R3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("R4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("R5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("R6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+
+
+
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 90;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);                          
+
+
+
+
+
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("R9. R-UART Received sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("R10. Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+
+//------------------------------------------------------------------------------------------------------------------------------------------------------
+//----------------------------------------FRAME ERROR SEQUENCE------------------------------------------------------------------------------------------------
+
+class frame_sequence extends uart_seq;
+	`uvm_object_utils(frame_sequence)
+	function new(string name = "frame_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+		req = uart_xtn::type_id::create("req");
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+		$display("\n\t 2 \n\n");
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+							dat_i == 0;
+                                    //    		dat_i == 1;	// MSB BYTE 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		$display("\n\t 3 \n\n");
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                      //                  dat_i == 8'b01000101 ;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                	dat_i == 27;     
+						});
+			`uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 0;     //00000000  MSB 0 to select THR/RBR registers LSB 11 => 00 5 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 80;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+
+class frame_rx_sequence extends uart_seq;
+	`uvm_object_utils(frame_rx_sequence)
+
+	function new(string name = "frame_rx_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+
+		req = uart_xtn::type_id::create("req");
+	
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("R1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+                                        		dat_i == 0;
+					//		dat_i == 2;	// MSB BYTE 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("R2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                 //       dat_i == 8'b10001010;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                     	dat_i == 54;
+							});
+			`uvm_info("FDPS",$sformatf("R3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("R4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("R5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("R6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 90;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("R9. R-UART Received sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)	// PARITY/OVERRUN/FRAMING/BREAK
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("R10. Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+//------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+//---------------------------------------- BREAK INTERRUPT------------------------------------------------------------------------------------------------
+
+class break_sequence extends uart_seq;
+	`uvm_object_utils(break_sequence)
+	function new(string name = "break_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+		req = uart_xtn::type_id::create("req");
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+		$display("\n\t 2 \n\n");
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+							dat_i == 0;
+                                    //    		dat_i == 1;	// MSB BYTE 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		$display("\n\t 3 \n\n");
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                      //                  dat_i == 8'b01000101 ;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                	dat_i == 27;     
+						});
+			`uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 67;     //01000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 80;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+
+class break_rx_sequence extends uart_seq;
+	`uvm_object_utils(break_rx_sequence)
+
+	function new(string name = "break_rx_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+
+		req = uart_xtn::type_id::create("req");
+	
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("R1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+                                        		dat_i == 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("R2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                     	dat_i == 54;
+							});
+			`uvm_info("FDPS",$sformatf("R3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("R4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("R5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("R6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 90;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("R9. R-UART Received sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011)
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("R10. Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+//------------------------------------------------------------------------------------------------------------------------------------------------------
+
+//---------------------------------------- TIMEOUT SEQUENCE------------------------------------------------------------------------------------------------
+
+class timeout_sequence extends uart_seq;
+	`uvm_object_utils(timeout_sequence)
+	function new(string name = "timeout_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+		req = uart_xtn::type_id::create("req");
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+		$display("\n\t 2 \n\n");
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+							dat_i == 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		$display("\n\t 3 \n\n");
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                	dat_i == 27;     
+						});
+			`uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+		
+	//	repeat(3)
+	//	begin
+                	start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 80;    //ANY DATA
+                	                     });
+			`uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+	//`	end 
+
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if((req.iir[3:1] == 3'b011) || (req.iir[3:1] == 3'b110))
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+
+
+	endtask:body
+
+endclass 
+
+
+class timeout_rx_sequence extends uart_seq;
+	`uvm_object_utils(timeout_rx_sequence)
+
+	function new(string name = "timeout_rx_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+
+		req = uart_xtn::type_id::create("req");
+	
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("R1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+                                        		dat_i == 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("R2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                     	dat_i == 54;
+							});
+			`uvm_info("FDPS",$sformatf("R3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("R4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 198;   	//11000110  MSB 11 to select threshold as 14  byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("R5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 5;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+                                     });
+		`uvm_info("FDPS",$sformatf("R6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 90;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("R9. R-UART Received sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if((req.iir[3:1] == 3'b011) || (req.iir[3:1] == 3'b110))
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+//------------------------------------------------------------------------------------------------------------------------------------------------------
+//---------------------------------------- THR EMPTY------------------------------------------------------------------------------------------------
+
+class thr_empty_sequence extends uart_seq;
+	`uvm_object_utils(thr_empty_sequence)
+	function new(string name = "thr_empty_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+		req = uart_xtn::type_id::create("req");
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("T1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+		$display("\n\t 2 \n\n");
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+							dat_i == 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("T2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		$display("\n\t 3 \n\n");
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                	dat_i == 27;     
+						});
+			`uvm_info("FDPS",$sformatf("T3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("T4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("T5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 7;     //00000111  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS 3) THR EMPTY
+                                     });
+		`uvm_info("FDPS",$sformatf("T6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 80;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;     //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("T8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010) 
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("T9. T-UART Recieved Buffer sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if((req.iir[3:1] == 3'b011) || (req.iir[3:1] == 3'b001))
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("T10 .Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 
+
+
+class thr_empty_rx_sequence extends uart_seq;
+	`uvm_object_utils(thr_empty_rx_sequence)
+
+	function new(string name = "thr_empty_rx_sequence");
+		super.new(name);
+	endfunction
+	
+	task body();
+
+		req = uart_xtn::type_id::create("req");
+	
+		// SETTING LINE CONTROL REGISTER (LCR) TO SET COMMUNICATION PARAMETERS - 0/1 AS DL LSB/MSB BYTES
+		start_item(req);
+		assert(req.randomize() with {
+					adr_i == 3;   	//LCR ADDRESS
+					we_i  == 1;	
+					dat_i == 128;	// 10000000  MSB 1 to select DL registers 
+				     }); 
+		`uvm_info("FDPS",$sformatf("R1. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+		finish_item(req);
+
+		// DL REGISTER SELECTED
+			// 1. SETTING DLR MSB BYTE 
+        	        start_item(req);
+        	        assert(req.randomize() with {
+                        		                adr_i == 1;	// 1 - DLR MSB BYTE
+                	                	        we_i  == 1;
+                                        		dat_i == 0;
+					//		dat_i == 2;	// MSB BYTE 0;
+        	                        	     });
+			`uvm_info("FDPS",$sformatf("R2. Printing from DLR MSB sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+
+			// 2. SETTING DLR LSB BYTE
+			start_item(req);
+                        assert(req.randomize() with {
+                                                        adr_i == 0;     // 0 - DLR MSB BYTE
+                                                        we_i  == 1;
+                                                 //       dat_i == 8'b10001010;     // LSB BYTE GIVES DIVISOR VALUE;
+                                                     	dat_i == 54;
+							});
+			`uvm_info("FDPS",$sformatf("R3. Printing from DLR LSB sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req); 
+
+		// SETTING LCR FOR NUMBER OF BITS PER CHARACTER AND 0/1 AS THR/IER ADDRESS 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 3;     //LCR ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 3;     //00000011  MSB 0 to select THR/RBR registers LSB 11 => 8 BITS/CHARACTER
+                                     });
+		`uvm_info("FDPS",$sformatf("R4. Printing from LCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING FCR TO CLEAR THR/RBR AND SET VALIDITY THRESHOLD LEVEL
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 1;	//FCR ADDRESS: SINCE  adr_i = 2 , we_i = 1 => FCR ,  adr_i = 2 , we_i = 0 => IIR
+                                        dat_i == 6;   	//00000110  MSB 00 to select threshold as 1 byte LSB 110 => CLEAR THR AND RBR
+                                     });
+		`uvm_info("FDPS",$sformatf("R5. Printing from FCR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SETTING IER TO ENABLE SPECIFIC INTERRUPTS: 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS
+		start_item(req);
+		assert(req.randomize() with {
+                                        adr_i == 1;     //IER ADDRESS
+                                        we_i  == 1;
+                                        dat_i == 7;     //00000101  LSB 101 => INTERRUPTS SET : 1) RECEIVED DATA AVAILABLE 2) RECEIVER LINE STATUS 3) THR EMPTY
+                                     });
+		`uvm_info("FDPS",$sformatf("R6. Printing from IER sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		// SENDING DATA TO UART THR
+                start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 1;	//THR ADDRESS
+                                        dat_i == 90;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R7. Printing from THR sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+
+		// SEQUENCE FOR READING IIR 
+		start_item(req);
+                assert(req.randomize() with {
+                                        adr_i == 2;     //FCR/IIR ADDRESS
+                                        we_i  == 0;     //IIR ADDRESS
+                                        dat_i == 0;    //ANY DATA
+                                     });
+		`uvm_info("FDPS",$sformatf("R8. Printing from IIR READ sequence \n %s",req.sprint()),UVM_LOW)
+                finish_item(req);
+	
+		//GET RESPONSE FROM THE DRIVER FOR THE IIR READING SEQUENCE
+		get_response(req);   // REQ FINE?
+
+		//PROCESS THE RESPONSE
+		if(req.iir[3:1] == 3'b010)
+		begin
+			start_item(req);
+                	assert(req.randomize() with {
+                                        adr_i == 0;     //THR/RBR ADDRESS
+                                        we_i  == 0;     //RBR ADDRESS
+                                        dat_i == 0;     
+                                     });
+			`uvm_info("FDPS",$sformatf("R9. R-UART Received sequence \n %s",req.sprint()),UVM_LOW)
+                	finish_item(req);
+		end
+
+		if(req.iir[3:1] == 3'b011 || req.iir[3:1] == 3'b001 )
+                begin
+                        start_item(req);
+                        assert(req.randomize() with {
+                                        adr_i == 5;     //LSR ADDRESS
+                                        we_i  == 0;    
+                                        dat_i == 0;    
+                                     });
+			`uvm_info("FDPS",$sformatf("R10. Printing from INTERRUPT: LSR READ sequence \n %s",req.sprint()),UVM_LOW)
+                        finish_item(req);
+                end
+	endtask:body
+
+endclass 

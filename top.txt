@@ -1,0 +1,109 @@
+`timescale 1ns/10ps
+module top;
+
+	import uvm_pkg::*;
+	import verification_pkg::*;
+	`include "uvm_macros.svh"
+
+	wire tx,rx;
+
+
+// -------------------------------CLOCK INSTANTIATION---------------------------------------------------------
+        
+	bit clk_tx ;
+        bit clk_rx ;
+ 
+	always	#10 clk_tx = ~clk_tx;
+	
+	always	#5 clk_rx = ~clk_rx;
+
+
+//-------------------------------------------------------------------------------------------------------------
+
+//---------------------------------INTERFACE INSTANTIATION----------------------------------------------------
+	
+
+	uart_if if_tx(clk_tx);
+	uart_if if_rx(clk_rx);
+
+//---------------------------------------------------------------------------------------------------------------
+
+
+//-------------------------------- UART MODULE INSTANTIATIONS-----------------------------------------------------
+	
+	// MASTER/TRANSMITTER UART
+        uart_top duv_tx (	
+				.wb_clk_i(clk_tx), 
+				// Wishbone signals
+				.wb_rst_i(if_tx.wb_rst_i), 		// ASYNCHRONOUS RESET		[I]  	[in use]
+				.wb_adr_i(if_tx.wb_adr_i), 		// REGISTER SELECTION		[I]	---"---
+				.wb_dat_i(if_tx.wb_dat_i),		// DATA INPUT			[I]	---"---
+				.wb_dat_o(if_tx.wb_dat_o), 		// DATA OUTPUT 			[O]	---"---	
+				.wb_we_i (if_tx.wb_we_i),		// WRITE/READ CYCLE SELECTION	[I]	---"---
+				.wb_stb_i(if_tx.wb_stb_i),		// TRANSFER CYCLE	 	[I]	---"---
+				.wb_cyc_i(if_tx.wb_cyc_i),		// BUS CYCLE IN PROGRESS 	[I]	---"---
+				.wb_ack_o(if_tx.wb_ack_o),		// ACKNOWLEDGEMENT 	 	[O] 	---"---
+				.wb_sel_i(if_tx.wb_sel_i),		// SELECT SIGNAL   	 	[I]	---"---
+				// interrupt request
+				.int_o(if_tx.int_o), 			// INTERRUPT OUTPUT		[O]	---"---
+			
+
+				// UART	signals
+				// serial input/output
+				.stx_pad_o(tx), 			// SERIAL OUTPUT		[O]	---"---
+				.srx_pad_i(rx)				// SERIAL INPUT			[I]	---"---
+
+
+				// modem signals 
+
+	//			`ifdef UART_HAS_BAUDRATE_OUTPUT
+	//			, baud_o(if_tx.baud_o)		// (16 X ACTUAL BAUD RATE)	[O]
+	//			`endif
+			   );
+//---------------------------------------------------------------------------------------------------------------------------------------       
+
+	// SLAVE/RECEIVER UART
+	uart_top duv_rx (
+                              
+				.wb_clk_i(clk_rx),
+                                // Wishbone signals
+                                .wb_rst_i(if_rx.wb_rst_i),              // ASYNCHRONOUS RESET           [I]     [in use]
+                                .wb_adr_i(if_rx.wb_adr_i),              // REGISTER SELECTION           [I]     ---"---
+                                .wb_dat_i(if_rx.wb_dat_i),              // DATA INPUT                   [I]     ---"---
+                                .wb_dat_o(if_rx.wb_dat_o),              // DATA OUTPUT                  [O]     ---"---
+                                .wb_we_i (if_rx.wb_we_i),               // WRITE/READ CYCLE SELECTION   [I]     ---"---
+                                .wb_stb_i(if_rx.wb_stb_i),              // TRANSFER CYCLE               [I]     ---"---
+                                .wb_cyc_i(if_rx.wb_cyc_i),              // BUS CYCLE IN PROGRESS        [I]     ---"---
+                                .wb_ack_o(if_rx.wb_ack_o),              // ACKNOWLEDGEMENT              [O]     ---"---
+                                .wb_sel_i(if_rx.wb_sel_i),              // SELECT SIGNAL                [I]     ---"---
+                                // interrupt request
+                                .int_o(if_rx.int_o),                    // INTERRUPT OUTPUT             [O]     ---"--- 
+                             
+
+			        // UART signals
+                                // serial input/output
+                                .stx_pad_o(rx),      			// SERIAL OUTPUT                [O]     ---"---
+                                .srx_pad_i(tx)      			// SERIAL INPUT                 [I]     ---"---
+
+							
+                                // modem signals
+        //                      `ifdef UART_HAS_BAUDRATE_OUTPUT
+        //                      , .baud_o(if_rx.baud_o)	        	// (16 X ACTUAL BAUD RATE)      [O]
+        //                      `endif
+                         	);
+
+//----------------------------------------------------------------------------------------------------------------
+
+    initial 
+    begin
+        `ifdef VCS
+            $fsdbDumpvars(0,top);
+        `endif 
+        // SET INTERFACE
+        uvm_config_db#(virtual uart_if)::set(null,"*","uart_if_tx",if_tx);
+	uvm_config_db#(virtual uart_if)::set(null,"*","uart_if_rx",if_rx);
+
+	run_test();
+    end
+
+endmodule

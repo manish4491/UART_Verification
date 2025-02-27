@@ -1,0 +1,12 @@
+class env_cfg extends uvm_object;
+    `uvm_object_utils(env_cfg)
+    function new(string name = "env_cfg");
+        super.new(name);
+    endfunction
+
+    int n_agts = 0;
+
+    agt_cfg ac_h[];
+
+
+endclass

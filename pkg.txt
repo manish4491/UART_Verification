@@ -1,0 +1,20 @@
+package verification_pkg;
+
+	import uvm_pkg::*;
+	`include "uvm_macros.svh"
+
+	`include "agt_cfg.sv"
+	`include "env_cfg.sv"
+	`include "transaction.sv"
+	`include "driver.sv"
+	`include "monitor.sv"
+	`include "sequencer.sv"
+	`include "agent.sv"
+	`include "vsequencer.sv"
+	`include "sequence.sv"
+	`include "vsequence.sv"
+	`include "scoreboard.sv"
+	`include "env.sv"
+	`include "test.sv"
+
+endpackage 
